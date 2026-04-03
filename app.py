@@ -20,7 +20,7 @@ def load_data():
 
 df = load_data()
 last_traffic = round(df["Пробки"].iloc[-1], 1)
-last_eco = int(df["Eкология"].iloc[-1])
+last_eco = int(df["Экология"].iloc[-1])
 
 # --- ИНТЕРФЕЙС ---
 st.title("🏙️ Smart City: Панель управления городом")
