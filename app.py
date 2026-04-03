@@ -5,100 +5,96 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Almaty AI Control", layout="wide")
+st.set_page_config(page_title="Almaty AI City Management", layout="wide")
 
-# --- 1. ТОЧНЫЕ ДАННЫЕ ПО РАЙОНАМ АЛМАТЫ ---
-# Координаты центров районов для корректной карты
-district_info = {
-    "Медеуский": {"lat": 43.245, "lon": 76.955, "base_traffic": 6, "base_aqi": 140},
-    "Бостандыкский": {"lat": 43.215, "lon": 76.915, "base_traffic": 7, "base_aqi": 110},
-    "Алмалинский": {"lat": 43.250, "lon": 76.925, "base_traffic": 8, "base_aqi": 130},
-    "Ауэзовский": {"lat": 43.225, "lon": 76.855, "base_traffic": 7, "base_aqi": 90},
-    "Жетысуский": {"lat": 43.290, "lon": 76.935, "base_traffic": 5, "base_aqi": 150},
-    "Турксибский": {"lat": 43.340, "lon": 76.960, "base_traffic": 4, "base_aqi": 160},
-    "Наурызбайский": {"lat": 43.200, "lon": 76.815, "base_traffic": 3, "base_aqi": 70},
-    "Алатауский": {"lat": 43.285, "lon": 76.825, "base_traffic": 4, "base_aqi": 100}
+# --- 1. БАЗА ДАННЫХ ПО РАЙОНАМ (РЕАЛЬНЫЕ КООРДИНАТЫ И МАРШРУТЫ) ---
+districts_db = {
+    "Медеуский": {
+        "lat": 43.245, "lon": 76.955, "routes": ["12", "28", "141", "60", "114"],
+        "base_traffic": 7.5, "problem": "Затор на пр. Достык / пр. Аль-Фараби"
+    },
+    "Бостандыкский": {
+        "lat": 43.215, "lon": 76.915, "routes": ["38", "63", "86", "127", "212"],
+        "base_traffic": 8.2, "problem": "Скопление транспорта по ул. Розыбакиева"
+    },
+    "Алмалинский": {
+        "lat": 43.250, "lon": 76.925, "routes": ["92", "98", "99", "119", "79"],
+        "base_traffic": 8.5, "problem": "Затор на ул. Толе би / ул. Байтурсынова"
+    },
+    "Ауэзовский": {
+        "lat": 43.225, "lon": 76.855, "routes": ["11", "37", "45", "103", "118"],
+        "base_traffic": 7.0, "problem": "Высокая нагрузка по пр. Абая"
+    },
+    "Жетысуский": {
+        "lat": 43.290, "lon": 76.935, "routes": ["7", "17", "29", "47", "50"],
+        "base_traffic": 6.5, "problem": "Затруднение в районе барахолки / ш. Северное кольцо"
+    },
+    "Турксибский": {
+        "lat": 43.340, "lon": 76.960, "routes": ["2", "48", "59", "71", "74"],
+        "base_traffic": 5.8, "problem": "Нагрузка на ул. Майлина (район Аэропорта)"
+    },
+    "Наурызбайский": {
+        "lat": 43.200, "lon": 76.815, "routes": ["15", "44", "137", "22", "115"],
+        "base_traffic": 4.5, "problem": "Замедление на ул. Шаляпина"
+    },
+    "Алатауский": {
+        "lat": 43.285, "lon": 76.825, "routes": ["102", "124", "125", "135", "14"],
+        "base_traffic": 5.2, "problem": "Нагрузка в районе Almaty Arena"
+    }
 }
 
-districts = list(district_info.keys())
+# --- 2. ЛОГИКА ВЫБОРА И ГЕНЕРАЦИЯ ДАННЫХ ---
+st.title("🏙️ Центр интеллектуального управления г. Алматы")
 
-# Генерация динамических данных
-def get_current_metrics():
-    rows = []
-    for name, info in district_info.items():
-        rows.append({
-            "Район": name,
-            "lat": info["lat"],
-            "lon": info["lon"],
-            "Пробки": np.clip(info["base_traffic"] + np.random.uniform(-1.5, 2.0), 0, 10),
-            "AQI": np.clip(info["base_aqi"] + np.random.randint(-20, 40), 20, 300),
-            "Шум": np.random.randint(60, 85),
-            "Инциденты": np.random.randint(0, 4),
-            "Светофоры_задержка": np.random.randint(30, 90)
-        })
-    return pd.DataFrame(rows)
+selected_district = st.sidebar.selectbox("🎯 Выберите район:", list(districts_db.keys()))
+d_info = districts_db[selected_district]
 
-df = get_current_metrics()
+# Генерируем уникальные метрики для выбранного района
+current_traffic = np.clip(d_info["base_traffic"] + np.random.uniform(-0.5, 1.5), 0, 10)
+current_aqi = np.random.randint(60, 220)
+current_incidents = np.random.randint(0, 5)
 
-# --- 2. ИНТЕРФЕЙС ---
-st.title("🛡️ Ситуационный центр Алматы: AI Мониторинг")
-
-# Сайдбар с выбором
-selected_district = st.sidebar.selectbox("🎯 Выберите район для управления:", districts)
-d_data = df[df["Район"] == selected_district].iloc[0]
-
-# Главные метрики (теперь они привязаны к выбранному району)
+# --- 3. ИНТЕРФЕЙС: МЕТРИКИ ---
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Загруженность", f"{d_data['Пробки']:.1f} / 10", delta_color="inverse")
-m2.metric("Воздух (AQI)", f"{int(d_data['AQI'])}", delta="Не ок" if d_data['AQI'] > 100 else "Ок")
-m3.metric("Инциденты", f"{int(d_data['Инциденты'])} ед.")
-m4.metric("Шум", f"{d_data['Шум']} дБ")
+m1.metric("Трафик района", f"{current_traffic:.1f} баллов")
+m2.metric("Качество воздуха", f"{current_aqi} AQI")
+m3.metric("ДТП / Инциденты", f"{current_incidents} ед.")
+m4.metric("Шум в районе", f"{np.random.randint(65, 85)} дБ")
 
 st.divider()
 
-# --- 3. ТЕПЛОВАЯ КАРТА (ИСПРАВЛЕННАЯ) ---
-st.subheader(f"🗺️ Карта инцидентов: {selected_district}")
-# Центрируем карту на выбранном районе
-fig_map = px.density_mapbox(df, lat='lat', lon='lon', z='Пробки', 
-                        radius=50, zoom=11,
-                        center=dict(lat=d_data['lat'], lon=d_data['lon']),
-                        mapbox_style="carto-positron", 
-                        color_continuous_scale="YlOrRd",
-                        title="Тепловая карта плотности трафика")
+# --- 4. ТЕПЛОВАЯ КАРТА (ТОЛЬКО ДЛЯ ВЫБРАННОГО РАЙОНА) ---
+st.subheader(f"📍 Локальная тепловая карта: {selected_district}")
+
+# Создаем точки только вокруг центра выбранного района для эффекта локальности
+map_data = pd.DataFrame({
+    'lat': [d_info['lat'] + np.random.uniform(-0.01, 0.01) for _ in range(10)],
+    'lon': [d_info['lon'] + np.random.uniform(-0.01, 0.01) for _ in range(10)],
+    'intensity': [current_traffic] * 10
+})
+
+fig_map = px.density_mapbox(map_data, lat='lat', lon='lon', z='intensity',
+                        radius=60, center=dict(lat=d_info['lat'], lon=d_info['lon']),
+                        zoom=12, mapbox_style="carto-positron",
+                        color_continuous_scale="Reds")
 st.plotly_chart(fig_map, use_container_width=True)
 
-# --- 4. ИИ АНАЛИТИКА И ПРОГНОЗ ---
-col_left, col_right = st.columns([1, 1])
+# --- 5. УНИКАЛЬНЫЙ ПРОГНОЗ И ИИ-АНАЛИЗ ---
+c_left, c_right = st.columns(2)
 
-with col_left:
-    st.subheader("🤖 Модуль объяснимого ИИ (XAI)")
-    reason = "Критический затор" if d_data['Пробки'] > 7.5 else "Плановая нагрузка"
-    st.warning(f"**Анализ по району {selected_district}:** {reason}")
-    st.write(f"**Что произошло:** Наблюдается эффект 'бутылочного горлышка'. Высокий AQI ({int(d_data['AQI'])}) подтверждает застой воздушных масс из-за медленного трафика.")
-    st.write("**Развитие:** Если не перенастроить светофоры, через 20 минут затор парализует выезды из района.")
+with c_left:
+    st.subheader("📉 Прогноз нагрузки на 60 мин")
+    # Прогноз зависит от текущего трафика (растет или падает случайно)
+    trend = np.random.choice([0.2, -0.1, 0.4]) 
+    future_times = [datetime.now() + timedelta(minutes=i*15) for i in range(5)]
+    future_vals = [current_traffic + (i * trend) for i in range(5)]
+    
+    fig_forecast = go.Figure(go.Scatter(x=future_times, y=future_vals, mode='lines+markers', line=dict(color='red')))
+    fig_forecast.update_layout(height=300)
+    st.plotly_chart(fig_forecast, use_container_width=True)
 
-with col_right:
-    st.subheader("📈 Прогноз на 60 минут")
-    steps = [datetime.now() + timedelta(minutes=i*15) for i in range(5)]
-    # Имитация прогноза: если пробки высокие, они будут расти без мер
-    vals = [d_data['Пробки'] + (i * 0.3) for i in range(5)]
-    fig_prog = go.Figure(data=go.Scatter(x=steps, y=vals, mode='lines+markers', name='Прогноз'))
-    fig_prog.update_layout(height=250, margin=dict(l=20, r=20, t=20, b=20))
-    st.plotly_chart(fig_prog, use_container_width=True)
-
-# --- 5. КОМАНДЫ УПРАВЛЕНИЯ ---
-st.divider()
-st.header("📲 Команды оперативного реагирования")
-c1, c2, c3 = st.columns(3)
-
-with c1:
-    if st.button("🚦 Оптимизировать светофоры"):
-        st.success(f"Циклы в {selected_district} изменены: +45с к зеленой фазе")
-with c2:
-    if st.button("🚌 Добавить автобусы"):
-        st.info("На линии выведен резервный состав (маршруты: 92, 121, 32)")
-with c3:
-    if st.button("📢 Оповестить жителей"):
-        st.write("Push-уведомления отправлены пользователям в радиусе 2км")
-
-st.sidebar.markdown(f"**Координаты центра:** \nLat: {d_data['lat']}  \nLon: {d_data['lon']}")
+with c_right:
+    st.subheader("🤖 Модуль объяснимого ИИ")
+    st.info(f"**Анализ ситуации в {selected_district}:**\n\n"
+            f"Обнаружена проблема: {d_info['problem']}. "
+            f"Уровень критичности: {'ВЫСОКИЙ' if current_traffic > 7
