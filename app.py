@@ -8,16 +8,33 @@ from datetime import datetime, timedelta
 # Настройка страницы
 st.set_page_config(page_title="CityPulse AI - Almaty", layout="wide")
 
-# --- 1. ЛОГИКА ВРЕМЕНИ (ЧАС ПИК) ---
+# --- 1. ТОЧНАЯ ЛОГИКА ВРЕМЕНИ (АЛМАТЫ) ---
 current_time_dt = datetime.now()
 current_hour = current_time_dt.hour
 
-if 8 <= current_hour <= 10 or 17 <= current_hour <= 20:
-    time_factor = 1.8  # Час пик
-elif 22 <= current_hour or current_hour <= 6:
-    time_factor = 0.4  # Ночь
+if 8 <= current_hour <= 10:
+    time_factor = 1.6  # Утренний час пик
+    time_desc = "🌅 УТРЕННИЙ ПИК"
+elif 17 <= current_hour <= 19:
+    time_factor = 1.9  # Вечерний час пик (самый сложный)
+    time_desc = "🌇 ВЕЧЕРНИЙ ПИК"
+elif 20 <= current_hour <= 23:
+    time_factor = 0.5  # ПОЗДНИЙ ВЕЧЕР (пробки уменьшаются)
+    time_desc = "🌙 ВЕЧЕРНИЙ СПАД"
+elif 0 <= current_hour <= 6:
+    time_factor = 0.2  # НОЧЬ (пустые дороги)
+    time_desc = "🌑 НОЧНОЙ РЕЖИМ"
 else:
-    time_factor = 1.0  # День
+    time_factor = 1.0  # ДЕНЬ (стандартный трафик)
+    time_desc = "☀️ ДНЕВНОЙ ТРАФИК"
+
+# Изменяем также прогноз: если сейчас вечерний пик, то через час станет ЛУЧШЕ
+if 18 <= current_hour <= 19:
+    prediction_trend = -0.5 # Скоро пробки рассосутся
+elif 7 <= current_hour <= 8 or 16 <= current_hour <= 17:
+    prediction_trend = 0.6 # Пробки будут расти
+else:
+    prediction_trend = 0.1
 
 # --- 2. БАЗА ДАННЫХ ---
 districts_db = {
