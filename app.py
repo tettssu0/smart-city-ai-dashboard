@@ -5,96 +5,100 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Almaty AI Command Center", layout="wide")
+st.set_page_config(page_title="Almaty AI Control", layout="wide")
 
-# --- ИМИТАЦИЯ ДАННЫХ ---
-districts = ["Медеуский", "Бостандыкский", "Алмалинский", "Ауэзовский", "Жетысуский", "Турксибский", "Наурызбайский", "Алатауский"]
+# --- 1. ТОЧНЫЕ ДАННЫЕ ПО РАЙОНАМ АЛМАТЫ ---
+# Координаты центров районов для корректной карты
+district_info = {
+    "Медеуский": {"lat": 43.245, "lon": 76.955, "base_traffic": 6, "base_aqi": 140},
+    "Бостандыкский": {"lat": 43.215, "lon": 76.915, "base_traffic": 7, "base_aqi": 110},
+    "Алмалинский": {"lat": 43.250, "lon": 76.925, "base_traffic": 8, "base_aqi": 130},
+    "Ауэзовский": {"lat": 43.225, "lon": 76.855, "base_traffic": 7, "base_aqi": 90},
+    "Жетысуский": {"lat": 43.290, "lon": 76.935, "base_traffic": 5, "base_aqi": 150},
+    "Турксибский": {"lat": 43.340, "lon": 76.960, "base_traffic": 4, "base_aqi": 160},
+    "Наурызбайский": {"lat": 43.200, "lon": 76.815, "base_traffic": 3, "base_aqi": 70},
+    "Алатауский": {"lat": 43.285, "lon": 76.825, "base_traffic": 4, "base_aqi": 100}
+}
 
-def get_data():
-    df = pd.DataFrame({
-        "Район": districts,
-        "Пробки": np.random.uniform(3, 9.8, len(districts)),
-        "AQI": np.random.randint(50, 200, len(districts)),
-        "Инциденты": np.random.randint(0, 6, len(districts)),
-        "Шум": np.random.randint(60, 90, len(districts)),
-        "Светофоры_задержка": np.random.randint(10, 150, len(districts)),
-        "lat": [43.238, 43.210, 43.250, 43.220, 43.270, 43.340, 43.200, 43.280], # Координаты Алматы
-        "lon": [76.945, 76.920, 76.910, 76.850, 76.930, 76.950, 76.800, 76.820]
-    })
-    return df
+districts = list(district_info.keys())
 
-df = get_data()
+# Генерация динамических данных
+def get_current_metrics():
+    rows = []
+    for name, info in district_info.items():
+        rows.append({
+            "Район": name,
+            "lat": info["lat"],
+            "lon": info["lon"],
+            "Пробки": np.clip(info["base_traffic"] + np.random.uniform(-1.5, 2.0), 0, 10),
+            "AQI": np.clip(info["base_aqi"] + np.random.randint(-20, 40), 20, 300),
+            "Шум": np.random.randint(60, 85),
+            "Инциденты": np.random.randint(0, 4),
+            "Светофоры_задержка": np.random.randint(30, 90)
+        })
+    return pd.DataFrame(rows)
 
-# --- ВЕРХНЯЯ ПАНЕЛЬ ---
-st.title("🛡️ Almaty Smart City: Система оперативного реагирования ИИ")
-st.sidebar.header("Параметры системы")
-selected_district = st.sidebar.selectbox("Выберите район управления:", districts)
+df = get_current_metrics()
+
+# --- 2. ИНТЕРФЕЙС ---
+st.title("🛡️ Ситуационный центр Алматы: AI Мониторинг")
+
+# Сайдбар с выбором
+selected_district = st.sidebar.selectbox("🎯 Выберите район для управления:", districts)
 d_data = df[df["Район"] == selected_district].iloc[0]
 
-# --- 1. ТЕПЛОВАЯ КАРТА ГОРОДА ---
-st.subheader("📍 Тепловая карта загруженности Алматы")
-fig_map = px.density_mapbox(df, lat='lat', lon='lon', z='Пробки', radius=30,
-                        center=dict(lat=43.238, lon=76.91), zoom=10,
-                        mapbox_style="carto-positron", title="Концентрация трафика")
+# Главные метрики (теперь они привязаны к выбранному району)
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Загруженность", f"{d_data['Пробки']:.1f} / 10", delta_color="inverse")
+m2.metric("Воздух (AQI)", f"{int(d_data['AQI'])}", delta="Не ок" if d_data['AQI'] > 100 else "Ок")
+m3.metric("Инциденты", f"{int(d_data['Инциденты'])} ед.")
+m4.metric("Шум", f"{d_data['Шум']} дБ")
+
+st.divider()
+
+# --- 3. ТЕПЛОВАЯ КАРТА (ИСПРАВЛЕННАЯ) ---
+st.subheader(f"🗺️ Карта инцидентов: {selected_district}")
+# Центрируем карту на выбранном районе
+fig_map = px.density_mapbox(df, lat='lat', lon='lon', z='Пробки', 
+                        radius=50, zoom=11,
+                        center=dict(lat=d_data['lat'], lon=d_data['lon']),
+                        mapbox_style="carto-positron", 
+                        color_continuous_scale="YlOrRd",
+                        title="Тепловая карта плотности трафика")
 st.plotly_chart(fig_map, use_container_width=True)
 
-# --- 2. ПРОГНОЗ НА ЧАС ---
-st.subheader("⏳ Прогноз загруженности на ближайшие 60 минут")
-time_steps = [datetime.now() + timedelta(minutes=i*10) for i in range(7)]
-forecast_values = [d_data['Пробки'] + (np.sin(i)*0.5) for i in range(7)]
-fig_forecast = go.Figure()
-fig_forecast.add_trace(go.Scatter(x=time_steps, y=forecast_values, mode='lines+markers', line=dict(color='orange', width=4)))
-fig_forecast.update_layout(yaxis_title="Баллы пробок", xaxis_title="Время")
-st.plotly_chart(fig_forecast, use_container_width=True)
+# --- 4. ИИ АНАЛИТИКА И ПРОГНОЗ ---
+col_left, col_right = st.columns([1, 1])
 
-# --- 3. ИИ МОДУЛЬ ОБЪЯСНЕНИЯ (AI INSIGHTS) ---
+with col_left:
+    st.subheader("🤖 Модуль объяснимого ИИ (XAI)")
+    reason = "Критический затор" if d_data['Пробки'] > 7.5 else "Плановая нагрузка"
+    st.warning(f"**Анализ по району {selected_district}:** {reason}")
+    st.write(f"**Что произошло:** Наблюдается эффект 'бутылочного горлышка'. Высокий AQI ({int(d_data['AQI'])}) подтверждает застой воздушных масс из-за медленного трафика.")
+    st.write("**Развитие:** Если не перенастроить светофоры, через 20 минут затор парализует выезды из района.")
+
+with col_right:
+    st.subheader("📈 Прогноз на 60 минут")
+    steps = [datetime.now() + timedelta(minutes=i*15) for i in range(5)]
+    # Имитация прогноза: если пробки высокие, они будут расти без мер
+    vals = [d_data['Пробки'] + (i * 0.3) for i in range(5)]
+    fig_prog = go.Figure(data=go.Scatter(x=steps, y=vals, mode='lines+markers', name='Прогноз'))
+    fig_prog.update_layout(height=250, margin=dict(l=20, r=20, t=20, b=20))
+    st.plotly_chart(fig_prog, use_container_width=True)
+
+# --- 5. КОМАНДЫ УПРАВЛЕНИЯ ---
 st.divider()
-st.header("🤖 ИИ-Аналитик: Что произошло?")
-
-crit_level = "КРИТИЧЕСКИЙ" if d_data['Пробки'] > 8 else "СРЕДНИЙ"
-color = "red" if crit_level == "КРИТИЧЕСКИЙ" else "orange"
-
-st.markdown(f"### Уровень угрозы: <span style='color:{color}'>{crit_level}</span>", unsafe_allow_html=True)
-
-col_ai1, col_ai2 = st.columns(2)
-with col_ai1:
-    st.info("📝 **Анализ ситуации**\n\n"
-            f"В районе {selected_district} зафиксировано аномальное замедление потока до {int(d_data['Пробки']*5)} км/ч. "
-            f"Причина: Высокая плотность транспорта + выявленный дорожный инцидент. Экологический фон (AQI: {d_data['AQI']}) "
-            "превышает норму из-за скопления выхлопных газов.")
-with col_ai2:
-    st.success("🔮 **Прогноз развития**\n\n"
-               "Без вмешательства через 30 минут пробка распространится на соседние магистрали. "
-               "При активации предложенных мер ситуация стабилизируется в течение 15 минут.")
-
-# --- 4. РЕКОМЕНДАЦИИ И ФОРСИРОВАНИЕ В СЛУЖБЫ ---
-st.divider()
-st.header("🚀 Оперативные решения и команды")
-
+st.header("📲 Команды оперативного реагирования")
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.subheader("🚦 Светофоры и Линии")
-    st.write("🔹 **Перенастройка циклов:** Режим 'Зеленая волна' + 40 сек.")
-    st.write("🔹 **Реверс:** Открыть доп. полосу на встречном направлении.")
-    if st.button("Применить циклы"):
-        st.toast("Светофоры перенастроены!")
-
+    if st.button("🚦 Оптимизировать светофоры"):
+        st.success(f"Циклы в {selected_district} изменены: +45с к зеленой фазе")
 with c2:
-    st.subheader("🚌 Транспорт и Навигация")
-    st.write(f"🔹 **Автобусы:** Частота маршрутов увеличена на 30%.")
-    st.write("🔹 **Уведомление:** Разослана инфо в 2GIS/Yandex: 'Объезд через Саина'.")
-    if st.button("Оповестить водителей"):
-        st.toast("Навигационные данные обновлены!")
-
+    if st.button("🚌 Добавить автобусы"):
+        st.info("На линии выведен резервный состав (маршруты: 92, 121, 32)")
 with c3:
-    st.subheader("📞 Городские службы")
-    st.warning("⚠️ Заявки отправлены:")
-    st.write("- 🚓 Дорожная полиция (Патруль)")
-    st.write("- 🛠️ Служба спасения (Эвакуация)")
-    st.write("- 🌬️ Эко-мониторинг (Замер)")
-    if st.button("Форсировать повторно"):
-        st.write("Заявки подтверждены в Ситуационном центре г. Алматы")
+    if st.button("📢 Оповестить жителей"):
+        st.write("Push-уведомления отправлены пользователям в радиусе 2км")
 
-st.divider()
-st.caption("Almaty AI Command Center v2.0 | Данные синтезированы для демонстрации")
+st.sidebar.markdown(f"**Координаты центра:** \nLat: {d_data['lat']}  \nLon: {d_data['lon']}")
