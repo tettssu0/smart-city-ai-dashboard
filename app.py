@@ -152,43 +152,55 @@ st.sidebar.markdown("---")
 st.sidebar.caption(f"Координаты узла: {d_info['lat']}, {d_info['lon']}")
 st.sidebar.caption("v3.0 Stable | Almaty Smart City AI")
 
-# --- 7. ИНТЕЛЛЕКТУАЛЬНЫЙ ЧАТ-ПОМОЩНИК (AI ASSISTANT) ---
+# --- 7. ИНТЕЛЛЕКТУАЛЬНЫЙ ЧАТ-ПОМОЩНИК (ДАННЫЕ В РЕАЛЬНОМ ВРЕМЕНИ) ---
 st.divider()
-st.header("💬 AI Консультант по городскому управлению")
+st.header("💬 AI Консультант: Анализ текущих графиков")
 
-# Инициализация истории чата (чтобы сообщения не пропадали при обновлении)
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": f"Здравствуйте! Я ИИ-система управления Алматы. Вижу нагрузку в {selected_district}е. Есть вопросы по оптимизации или экологии?"}
+        {"role": "assistant", "content": f"Я проанализировал графики по району {selected_district}. Готов ответить на вопросы по пробкам ({current_traffic:.1f} балла) или экологии ({current_aqi} AQI)."}
     ]
 
-# Отображение истории сообщений
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Поле для ввода вопроса пользователем
-if prompt := st.chat_input("Спросите меня о пробках, экологии или маршрутах..."):
-    # Добавляем сообщение пользователя в историю
+if prompt := st.chat_input("Спросите ИИ о данных на графиках..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Логика ответов ИИ (Имитация экспертных знаний)
     with st.chat_message("assistant"):
-        response_placeholder = st.empty()
+        user_query = prompt.lower()
         
-        # Простая база знаний для ответов
-        if "пробк" in prompt.lower() or "трафик" in prompt.lower():
-            full_response = f"В данный момент в {selected_district}е трафик составляет {current_traffic:.1f} балла. Я рекомендую активировать 'Зеленую волну' на основных магистралях и перенаправить поток через объездные пути."
-        elif "воздух" in prompt.lower() or "экология" in prompt.lower():
-            full_response = f"Уровень AQI сейчас {current_aqi}. Основной вклад в загрязнение вносит транспорт. Рекомендую увеличить частоту электробусов и ограничить въезд большегрузов в центр."
-        elif "маршрут" in prompt.lower() or "автобус" in prompt.lower():
-            full_response = f"Для района {selected_district} ключевыми маршрутами являются: {', '.join(d_info['routes'])}. Мы можем форсировать выход 5 дополнительных единиц на эти линии."
+        # ЛОГИКА АНАЛИЗА ГРАФИКОВ
+        if "пробк" in user_query or "трафик" in user_query:
+            if current_traffic > 7.5:
+                response = f"**Анализ графика трафика:** Сейчас критический уровень ({current_traffic:.1f} балла). На тепловой карте видно красное смещение. Прогноз показывает рост, поэтому я уже предложил активировать маршруты {', '.join(d_info['routes'])}."
+            else:
+                response = f"**Анализ графика трафика:** Ситуация стабильная, {current_traffic:.1f} балла. На графике прогноза резких скачков не предвидится."
+
+        elif "воздух" in user_query or "экология" in user_query or "aqi" in user_query:
+            if current_aqi > 150:
+                response = f"**Анализ датчиков воздуха:** Показатель {current_aqi} AQI (Опасно). Это коррелирует с пробками в {selected_district}е. Рекомендую ограничить движение на 20%."
+            else:
+                response = f"**Анализ датчиков воздуха:** Уровень {current_aqi} AQI в пределах нормы для города. Дополнительный мониторинг не требуется."
+
+        elif "инцидент" in user_query or "дтп" in user_query:
+            if current_incidents > 0:
+                response = f"**Анализ дорожных событий:** На графике инцидентов зафиксировано {current_incidents} происшествий. Это основная причина задержки на светофорах ({d_info['problem']})."
+            else:
+                response = f"В районе {selected_district} ДТП на данный момент не зафиксировано. Движение идет в штатном режиме."
+
+        elif "прогноз" in user_query or "через час" in user_query:
+            # Берем последнее значение из нашего списка будущих значений (тренда)
+            future_val = future_vals[-1] 
+            diff = future_val - current_traffic
+            trend_text = "ухудшение" if diff > 0 else "улучшение"
+            response = f"**Анализ графика прогноза:** Через 60 минут ожидается {trend_text} до {future_val:.1f} баллов. Моя рекомендация: действовать на опережение прямо сейчас."
+            
         else:
-            full_response = "Я анализирую данные из всех служб города Алматы. Могу помочь с расчетом времени прибытия, анализом шума или планированием дорожных работ. Что именно вас интересует?"
-        
-        response_placeholder.markdown(full_response)
-    
-    # Сохраняем ответ ИИ в историю
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+            response = f"Я вижу данные по району {selected_district}: Трафик {current_traffic:.1f}, Воздух {current_aqi}, Инциденты {current_incidents}. Спросите конкретнее об одном из этих графиков."
+
+        st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
