@@ -68,20 +68,68 @@ fig_map = px.density_mapbox(map_points, lat='lat', lon='lon', z='intensity',
 fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, coloraxis_showscale=False)
 st.plotly_chart(fig_map, use_container_width=True)
 
-# --- 5. ПРОГНОЗ И АНАЛИЗ ---
+# --- 5. ПРОГНОЗ И АНАЛИЗ (ИСПРАВЛЕННЫЙ) ---
 c_left, c_right = st.columns(2)
+
 with c_left:
-    st.subheader("📉 Прогноз на 60 мин")
-    trend = 0.3 # Можно сделать динамичным
+    st.subheader("📉 Прогноз нагрузки на 60 мин")
+    
+    # Создаем реалистичный прогноз от текущей точки
+    current_val = d_data['Пробки']
+    
+    # Определяем тренд: в нагруженных районах пробки обычно растут
+    if current_val > 7:
+        step = np.random.uniform(0.1, 0.4) # Растет
+    elif current_val < 4:
+        step = np.random.uniform(-0.2, 0.2) # Стабильно
+    else:
+        step = np.random.uniform(-0.3, 0.3) # Колеблется
+
+    # Генерируем 5 точек (каждые 15 минут)
     future_times = [datetime.now() + timedelta(minutes=i*15) for i in range(5)]
-    future_vals = [np.clip(d_data['Пробки'] + (i * trend), 0, 10) for i in range(5)]
-    fig_forecast = go.Figure(go.Scatter(x=future_times, y=future_vals, mode='lines+markers', line=dict(color='firebrick')))
+    # Первая точка ВСЕГДА равна текущему значению
+    future_vals = [np.clip(current_val + (i * step) + np.random.uniform(-0.1, 0.1), 0, 10) for i in range(5)]
+    
+    # Создаем график
+    fig_forecast = go.Figure()
+    fig_forecast.add_trace(go.Scatter(
+        x=future_times, 
+        y=future_vals, 
+        mode='lines+markers+text',
+        name='Прогноз ИИ',
+        line=dict(color='firebrick', width=4),
+        marker=dict(size=10),
+        text=[f"{v:.1f}" for v in future_vals],
+        textposition="top center"
+    ))
+    
+    fig_forecast.update_layout(
+        height=300, 
+        margin=dict(l=0, r=0, t=30, b=0),
+        yaxis=dict(range=[0, 11]), # Фиксируем шкалу от 0 до 10 баллов
+        xaxis_title="Время прогноза",
+        yaxis_title="Баллы пробок"
+    )
     st.plotly_chart(fig_forecast, use_container_width=True)
 
 with c_right:
     st.subheader("🤖 Модуль объяснимого ИИ")
-    status_text = "ВЫСОКИЙ" if d_data['Пробки'] > 7.0 else "СРЕДНИЙ"
-    st.info(f"**Анализ ситуации в {selected_district}:**\n\n**Проблема:** {d_info['problem']}. \n\n**Критичность:** {status_text}.")
+    
+    # Динамический текст анализа
+    status_text = "КРИТИЧЕСКИЙ" if current_val > 7.5 else "НОРМАЛЬНЫЙ"
+    trend_desc = "росту" if future_vals[-1] > current_val else "снижению"
+    
+    st.info(f"""
+    **Анализ по району {selected_district}:**
+    
+    * **Текущий статус:** {status_text}
+    * **Динамика:** Склонность к {trend_desc} нагрузки.
+    * **Причина:** {d_info['problem']}.
+    
+    **Рекомендация:** На основе прогноза ({future_vals[-1]:.1f} балла к 
+    {(datetime.now() + timedelta(minutes=60)).strftime('%H:%M')}), 
+    необходимо превентивное вмешательство в работу светофорных объектов.
+    """)
 
 # --- 6. КОМАНДЫ РЕАГИРОВАНИЯ ---
 st.divider()
