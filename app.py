@@ -151,3 +151,44 @@ with col_cmd3:
 st.sidebar.markdown("---")
 st.sidebar.caption(f"Координаты узла: {d_info['lat']}, {d_info['lon']}")
 st.sidebar.caption("v3.0 Stable | Almaty Smart City AI")
+
+# --- 7. ИНТЕЛЛЕКТУАЛЬНЫЙ ЧАТ-ПОМОЩНИК (AI ASSISTANT) ---
+st.divider()
+st.header("💬 AI Консультант по городскому управлению")
+
+# Инициализация истории чата (чтобы сообщения не пропадали при обновлении)
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": f"Здравствуйте! Я ИИ-система управления Алматы. Вижу нагрузку в {selected_district}е. Есть вопросы по оптимизации или экологии?"}
+    ]
+
+# Отображение истории сообщений
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Поле для ввода вопроса пользователем
+if prompt := st.chat_input("Спросите меня о пробках, экологии или маршрутах..."):
+    # Добавляем сообщение пользователя в историю
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Логика ответов ИИ (Имитация экспертных знаний)
+    with st.chat_message("assistant"):
+        response_placeholder = st.empty()
+        
+        # Простая база знаний для ответов
+        if "пробк" in prompt.lower() or "трафик" in prompt.lower():
+            full_response = f"В данный момент в {selected_district}е трафик составляет {current_traffic:.1f} балла. Я рекомендую активировать 'Зеленую волну' на основных магистралях и перенаправить поток через объездные пути."
+        elif "воздух" in prompt.lower() or "экология" in prompt.lower():
+            full_response = f"Уровень AQI сейчас {current_aqi}. Основной вклад в загрязнение вносит транспорт. Рекомендую увеличить частоту электробусов и ограничить въезд большегрузов в центр."
+        elif "маршрут" in prompt.lower() or "автобус" in prompt.lower():
+            full_response = f"Для района {selected_district} ключевыми маршрутами являются: {', '.join(d_info['routes'])}. Мы можем форсировать выход 5 дополнительных единиц на эти линии."
+        else:
+            full_response = "Я анализирую данные из всех служб города Алматы. Могу помочь с расчетом времени прибытия, анализом шума или планированием дорожных работ. Что именно вас интересует?"
+        
+        response_placeholder.markdown(full_response)
+    
+    # Сохраняем ответ ИИ в историю
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
