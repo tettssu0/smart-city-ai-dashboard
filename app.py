@@ -6,168 +6,106 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # Настройка страницы
-st.set_page_config(page_title="Almaty AI City Management", layout="wide")
+st.set_page_config(page_title="CityPulse AI - Almaty", layout="wide")
 
-# --- 1. БАЗА ДАННЫХ ПО РАЙОНАМ ---
+# --- 1. ЛОГИКА ВРЕМЕНИ (ЧАС ПИК) ---
+current_hour = datetime.now().hour
+
+# Коэффициент трафика: пик утром (8-9) и вечером (17-19)
+if 8 <= current_hour <= 10 or 17 <= current_hour <= 20:
+    time_factor = 1.8  # Час пик
+elif 22 <= current_hour or current_hour <= 6:
+    time_factor = 0.3  # Ночь
+else:
+    time_factor = 1.0  # Обычное время
+
+# --- 2. БАЗА ДАННЫХ ПО РАЙОНАМ ---
 districts_db = {
-    "Медеуский": {"lat": 43.245, "lon": 76.955, "routes": ["12", "28", "141", "60", "114"], "base_traffic": 7.5, "problem": "Затор на пр. Достык / пр. Аль-Фараби"},
-    "Бостандыкский": {"lat": 43.215, "lon": 76.915, "routes": ["38", "63", "86", "127", "212"], "base_traffic": 8.2, "problem": "Скопление по ул. Розыбакиева"},
-    "Алмалинский": {"lat": 43.250, "lon": 76.925, "routes": ["92", "98", "99", "119", "79"], "base_traffic": 8.5, "problem": "Затор на ул. Толе би / ул. Байтурсынова"},
-    "Ауэзовский": {"lat": 43.225, "lon": 76.855, "routes": ["11", "37", "45", "103", "118"], "base_traffic": 7.0, "problem": "Высокая нагрузка по пр. Абая"},
-    "Жетысуский": {"lat": 43.290, "lon": 76.935, "routes": ["7", "17", "29", "47", "50"], "base_traffic": 6.5, "problem": "Затруднение в районе барахолки"},
-    "Турксибский": {"lat": 43.340, "lon": 76.960, "routes": ["2", "48", "59", "71", "74"], "base_traffic": 5.8, "problem": "Нагрузка в районе Аэропорта"},
-    "Наурызбайский": {"lat": 43.200, "lon": 76.815, "routes": ["15", "44", "137", "22", "115"], "base_traffic": 4.5, "problem": "Замедление на ул. Шаляпина"},
-    "Алатауский": {"lat": 43.285, "lon": 76.825, "routes": ["102", "124", "125", "135", "14"], "base_traffic": 5.2, "problem": "Нагрузка в районе Almaty Arena"}
+    "Медеуский": {"lat": 43.245, "lon": 76.955, "routes": ["12", "28", "60"], "base_traffic": 5.0, "traffic_lights": [[43.242, 76.958], [43.248, 76.950]]},
+    "Бостандыкский": {"lat": 43.215, "lon": 76.915, "routes": ["38", "63", "127"], "base_traffic": 5.2, "traffic_lights": [[43.210, 76.910], [43.220, 76.920]]},
+    "Алмалинский": {"lat": 43.250, "lon": 76.925, "routes": ["92", "98", "79"], "base_traffic": 5.5, "traffic_lights": [[43.252, 76.928], [43.248, 76.922]]},
+    "Ауэзовский": {"lat": 43.225, "lon": 76.855, "routes": ["11", "37", "118"], "base_traffic": 4.8, "traffic_lights": [[43.228, 76.850]]},
+    "Жетысуский": {"lat": 43.290, "lon": 76.935, "routes": ["17", "29", "50"], "base_traffic": 4.2, "traffic_lights": [[43.295, 76.930]]},
+    "Турксибский": {"lat": 43.340, "lon": 76.960, "routes": ["2", "48", "74"], "base_traffic": 3.8, "traffic_lights": [[43.345, 76.965]]},
+    "Наурызбайский": {"lat": 43.200, "lon": 76.815, "routes": ["15", "44", "22"], "base_traffic": 3.0, "traffic_lights": [[43.205, 76.820]]},
+    "Алатауский": {"lat": 43.285, "lon": 76.825, "routes": ["102", "124", "14"], "base_traffic": 3.5, "traffic_lights": [[43.280, 76.820]]}
 }
 
-# --- 2. ГЕНЕРАЦИЯ ОБЩЕЙ ТАБЛИЦЫ (ЧТОБЫ ИИ ВИДЕЛ ВЕСЬ ГОРОД) ---
-@st.cache_data # Чтобы данные не прыгали при каждом клике
-def create_city_df():
-    rows = []
-    for name, info in districts_db.items():
-        rows.append({
-            "Район": name,
-            "Пробки": np.clip(info["base_traffic"] + np.random.uniform(-0.5, 1.5), 0, 10),
-            "AQI": np.random.randint(60, 220),
-            "Инциденты": np.random.randint(0, 5),
-            "Шум": np.random.randint(65, 85),
-            "lat": info["lat"],
-            "lon": info["lon"]
-        })
-    return pd.DataFrame(rows)
+# --- 3. ГЕНЕРАЦИЯ ДИНАМИЧЕСКИХ ДАННЫХ ---
+rows = []
+for name, info in districts_db.items():
+    traffic = np.clip(info["base_traffic"] * time_factor + np.random.uniform(-0.5, 0.5), 1, 10)
+    aqi = np.clip(100 * (traffic / 5) + np.random.randint(-20, 20), 50, 300)
+    # ДТП зависят от трафика: чем больше пробки, тем выше шанс аварии
+    incidents = int(np.random.poisson(traffic / 3)) 
+    rows.append({
+        "Район": name, "Пробки": traffic, "AQI": aqi, "Инциденты": incidents,
+        "lat": info["lat"], "lon": info["lon"], "lights": info["traffic_lights"]
+    })
+df = pd.DataFrame(rows)
 
-df = create_city_df()
+# --- 4. ИНТЕРФЕЙС ---
+st.title("🏙️ CityPulse: Интеллектуальное управление Алматы")
+st.subheader(f"Текущее время: {datetime.now().strftime('%H:%M')} | {'ЧАС ПИК' if time_factor > 1.5 else 'Штатный режим'}")
 
-# --- 3. ВЫБОР РАЙОНА И ИНТЕРФЕЙС ---
-st.title("🏙️ Центр интеллектуального управления г. Алматы")
-selected_district = st.sidebar.selectbox("🎯 Выберите район управления:", list(districts_db.keys()))
-
-# Данные конкретно для выбранного района
+selected_district = st.sidebar.selectbox("🎯 Выберите район:", list(districts_db.keys()))
 d_data = df[df["Район"] == selected_district].iloc[0]
-d_info = districts_db[selected_district]
 
 # Метрики
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Трафик района", f"{d_data['Пробки']:.1f} баллов")
-m2.metric("Качество воздуха", f"{int(d_data['AQI'])} AQI")
-m3.metric("ДТП / Инциденты", f"{int(d_data['Инциденты'])} ед.")
-m4.metric("Шум в районе", f"{d_data['Шум']} дБ")
+m1.metric("Трафик", f"{d_data['Пробки']:.1f} баллов", delta="Пиковая нагрузка" if time_factor > 1.5 else None)
+m2.metric("Воздух", f"{int(d_data['AQI'])} AQI", delta="Загрязнение" if d_data['AQI'] > 150 else None, delta_color="inverse")
+m3.metric("ДТП (сейчас)", f"{d_data['Инциденты']} ед.")
+m4.metric("Активных светофоров", f"{len(d_data['lights'])} узлов")
 
 st.divider()
 
-# --- 4. ТЕПЛОВАЯ КАРТА ---
-st.subheader(f"📍 Оперативная обстановка: {selected_district}")
+# --- 5. ТЕПЛОВАЯ КАРТА СО СВЕТОФОРАМИ ---
+st.subheader(f"📍 Карта инцидентов и светофоров: {selected_district}")
+
+# Точки пробок
 map_points = pd.DataFrame({
-    'lat': [d_info['lat'] + np.random.uniform(-0.015, 0.015) for _ in range(30)],
-    'lon': [d_info['lon'] + np.random.uniform(-0.015, 0.015) for _ in range(30)],
-    'intensity': [d_data['Пробки']] * 30
+    'lat': [d_data['lat'] + np.random.uniform(-0.01, 0.01) for _ in range(20)],
+    'lon': [d_data['lon'] + np.random.uniform(-0.01, 0.01) for _ in range(20)],
+    'intensity': [d_data['Пробки']] * 20
 })
+
 fig_map = px.density_mapbox(map_points, lat='lat', lon='lon', z='intensity',
-                        radius=40, center=dict(lat=d_info['lat'], lon=d_info['lon']),
-                        zoom=12, mapbox_style="carto-positron", color_continuous_scale="Reds", range_color=[0, 10])
-fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, coloraxis_showscale=False)
+                        radius=40, center=dict(lat=d_data['lat'], lon=d_data['lon']),
+                        zoom=12.5, mapbox_style="carto-positron", color_continuous_scale="Reds", range_color=[0, 10])
+
+# Добавляем точки светофоров для оптимизации
+lights_lat = [l[0] for l in d_data['lights']]
+lights_lon = [l[1] for l in d_data['lights']]
+
+fig_map.add_trace(go.Scattermapbox(
+    lat=lights_lat, lon=lights_lon,
+    mode='markers+text',
+    marker=go.scattermapbox.Marker(size=14, color='blue', symbol='circle'),
+    text=["🚦 Оптимизация" for _ in lights_lat],
+    textposition="bottom center",
+    name="Светофоры"
+))
+
+fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, showlegend=False)
 st.plotly_chart(fig_map, use_container_width=True)
 
-# --- 5. ПРОГНОЗ И АНАЛИЗ (ИСПРАВЛЕННЫЙ) ---
-c_left, c_right = st.columns(2)
-
-with c_left:
-    st.subheader("📉 Прогноз нагрузки на 60 мин")
-    
-    # Создаем реалистичный прогноз от текущей точки
-    current_val = d_data['Пробки']
-    
-    # Определяем тренд: в нагруженных районах пробки обычно растут
-    if current_val > 7:
-        step = np.random.uniform(0.1, 0.4) # Растет
-    elif current_val < 4:
-        step = np.random.uniform(-0.2, 0.2) # Стабильно
-    else:
-        step = np.random.uniform(-0.3, 0.3) # Колеблется
-
-    # Генерируем 5 точек (каждые 15 минут)
-    future_times = [datetime.now() + timedelta(minutes=i*15) for i in range(5)]
-    # Первая точка ВСЕГДА равна текущему значению
-    future_vals = [np.clip(current_val + (i * step) + np.random.uniform(-0.1, 0.1), 0, 10) for i in range(5)]
-    
-    # Создаем график
-    fig_forecast = go.Figure()
-    fig_forecast.add_trace(go.Scatter(
-        x=future_times, 
-        y=future_vals, 
-        mode='lines+markers+text',
-        name='Прогноз ИИ',
-        line=dict(color='firebrick', width=4),
-        marker=dict(size=10),
-        text=[f"{v:.1f}" for v in future_vals],
-        textposition="top center"
-    ))
-    
-    fig_forecast.update_layout(
-        height=300, 
-        margin=dict(l=0, r=0, t=30, b=0),
-        yaxis=dict(range=[0, 11]), # Фиксируем шкалу от 0 до 10 баллов
-        xaxis_title="Время прогноза",
-        yaxis_title="Баллы пробок"
-    )
-    st.plotly_chart(fig_forecast, use_container_width=True)
-
-with c_right:
-    st.subheader("🤖 Модуль объяснимого ИИ")
-    
-    # Динамический текст анализа
-    status_text = "КРИТИЧЕСКИЙ" if current_val > 7.5 else "НОРМАЛЬНЫЙ"
-    trend_desc = "росту" if future_vals[-1] > current_val else "снижению"
-    
-    st.info(f"""
-    **Анализ по району {selected_district}:**
-    
-    * **Текущий статус:** {status_text}
-    * **Динамика:** Склонность к {trend_desc} нагрузки.
-    * **Причина:** {d_info['problem']}.
-    
-    **Рекомендация:** На основе прогноза ({future_vals[-1]:.1f} балла к 
-    {(datetime.now() + timedelta(minutes=60)).strftime('%H:%M')}), 
-    необходимо превентивное вмешательство в работу светофорных объектов.
-    """)
-
-# --- 6. КОМАНДЫ РЕАГИРОВАНИЯ ---
+# --- 6. ЧАТ-БОТ АНАЛИТИК ---
 st.divider()
-st.header("📲 Оперативные решения")
-c1, c2, c3 = st.columns(3)
-with c1:
-    if st.button("🚦 Светофоры: Оптимизировать"): st.toast("Циклы изменены!")
-with c2:
-    if st.button("🚌 Автобусы: Усилить маршруты"): st.success(f"Доп. транспорт: {', '.join(d_info['routes'])}")
-with c3:
-    if st.button("📢 Оповестить жителей"): st.write("✅ Уведомления отправлены")
+st.header("🧠 Аналитический отчет ИИ")
 
-# --- 7. ГЛОБАЛЬНЫЙ ИИ-АНАЛИТИК ---
-st.divider()
-st.header("🧠 Глобальный ИИ-аналитик Алматы")
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Я анализирую все 8 районов. Спросите меня о ситуации в городе!"}]
+with st.chat_message("assistant"):
+    # ИИ анализирует время и данные
+    time_comment = "В городе наблюдается вечерний час пик." if time_factor > 1.5 else "Трафик соответствует норме для данного времени суток."
+    worst_district = df.loc[df['Пробки'].idxmax()]['Район']
+    
+    st.write(f"**Сводка на {datetime.now().strftime('%H:%M')}:**")
+    st.write(f"- {time_comment}")
+    st.write(f"- В районе {selected_district} зафиксировано {d_data['Инциденты']} ДТП. Это влияет на рост AQI до {int(d_data['AQI'])}.")
+    st.write(f"- **Рекомендация:** Требуется ручная корректировка фаз на {len(d_data['lights'])} светофорах (отмечены синим на карте).")
+    st.write(f"- Самый загруженный район города сейчас: **{worst_district}**.")
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]): st.markdown(message["content"])
-
-if prompt := st.chat_input("Например: 'Общий отчет'"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        user_query = prompt.lower()
-        # ТЕПЕРЬ df ДОСТУПЕН ВЕЗДЕ!
-        worst_traffic_district = df.loc[df['Пробки'].idxmax()]['Район']
-        max_traffic_val = df['Пробки'].max()
-        worst_air_district = df.loc[df['AQI'].idxmax()]['Район']
-        
-        if "отчет" in user_query or "все" in user_query:
-            response = f"**Отчет по Алматы:** Хуже всего с пробками в районе **{worst_traffic_district}** ({max_traffic_val:.1f} балла). Самый высокий AQI в районе **{worst_air_district}**."
-        elif "пробк" in user_query:
-            response = f"В городе средняя загруженность {df['Пробки'].mean():.1f} балла. Лидер по заторам — {worst_traffic_district}."
-        else:
-            response = f"Я вижу данные по всем районам. В {selected_district}е сейчас {d_data['Пробки']:.1f} балла. Где еще проверить?"
-        
-        st.markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+# Кнопка действия
+if st.button(f"⚡ Оптимизировать светофоры в {selected_district}"):
+    st.balloons()
+    st.success("Команда передана в Центр управления трафиком. Время ожидания сокращено на 15%!")
