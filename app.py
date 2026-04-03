@@ -81,19 +81,42 @@ m4.metric("Шум в районе", f"{current_noise} дБ")
 
 st.divider()
 
-# --- 4. ТЕПЛОВАЯ КАРТА (ТОЛЬКО ВЫБРАННЫЙ РАЙОН) ---
-st.subheader(f"📍 Локальная тепловая карта: {selected_district}")
+# --- 4. ТЕПЛОВАЯ КАРТА (ИСПРАВЛЕННАЯ И НАСЫЩЕННАЯ) ---
+st.subheader(f"📍 Оперативная обстановка: {selected_district}")
 
-map_points = pd.DataFrame({
-    'lat': [d_info['lat'] + np.random.uniform(-0.008, 0.008) for _ in range(15)],
-    'lon': [d_info['lon'] + np.random.uniform(-0.008, 0.008) for _ in range(15)],
-    'intensity': [current_traffic] * 15
+# Создаем более плотное "облако" точек для эффекта тепловой карты
+# Генерируем 30 точек, чтобы карта выглядела "живой"
+np.random.seed(42) # Для стабильности визуализации
+lats = [d_info['lat'] + np.random.uniform(-0.015, 0.015) for _ in range(30)]
+lons = [d_info['lon'] + np.random.uniform(-0.015, 0.015) for _ in range(30)]
+# Интенсивность каждой точки немного колеблется вокруг текущего балла пробок
+intensities = [np.clip(current_traffic + np.random.uniform(-1, 1), 0, 10) for _ in range(30)]
+
+map_data = pd.DataFrame({
+    'lat': lats,
+    'lon': lons,
+    'intensity': intensities
 })
 
-fig_map = px.density_mapbox(map_points, lat='lat', lon='lon', z='intensity',
-                        radius=50, center=dict(lat=d_info['lat'], lon=d_info['lon']),
-                        zoom=12.5, mapbox_style="carto-positron",
-                        color_continuous_scale="Reds")
+# Настройка визуализации
+fig_map = px.density_mapbox(
+    map_data, 
+    lat='lat', 
+    lon='lon', 
+    z='intensity',
+    radius=40, # Размер пятна
+    center=dict(lat=d_info['lat'], lon=d_info['lon']),
+    zoom=12, 
+    mapbox_style="carto-positron",
+    color_continuous_scale="Reds",
+    range_color=[0, 10] # Чтобы 8 баллов всегда были ярко-красными
+)
+
+fig_map.update_layout(
+    margin={"r":0,"t":0,"l":0,"b":0},
+    coloraxis_showscale=False # Убираем лишнюю шкалу сбоку для красоты
+)
+
 st.plotly_chart(fig_map, use_container_width=True)
 
 # --- 5. УНИКАЛЬНЫЙ ПРОГНОЗ И ИИ-АНАЛИЗ ---
