@@ -4,9 +4,14 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import pytz  # Добавляем библиотеку для работы с часовыми поясами
 
 # Настройка страницы
 st.set_page_config(page_title="Almaty AI City Management", layout="wide")
+
+# --- 0. НАСТРОЙКА ЧАСОВОГО ПОЯСА АЛМАТЫ (UTC+5) ---
+tz_almaty = pytz.timezone('Asia/Almaty')
+almaty_now = datetime.now(tz_almaty)
 
 # --- 1. БАЗА ДАННЫХ ПО РАЙОНАМ ---
 districts_db = {
@@ -20,8 +25,8 @@ districts_db = {
     "Алатауский": {"lat": 43.285, "lon": 76.825, "routes": ["102", "124", "125", "135", "14"], "base_traffic": 5.2, "problem": "Нагрузка в районе Almaty Arena"}
 }
 
-# --- 2. ГЕНЕРАЦИЯ ОБЩЕЙ ТАБЛИЦЫ (ЧТОБЫ ИИ ВИДЕЛ ВЕСЬ ГОРОД) ---
-@st.cache_data # Чтобы данные не прыгали при каждом клике
+# --- 2. ГЕНЕРАЦИЯ ОБЩЕЙ ТАБЛИЦЫ ---
+@st.cache_data
 def create_city_df():
     rows = []
     for name, info in districts_db.items():
@@ -40,9 +45,11 @@ df = create_city_df()
 
 # --- 3. ВЫБОР РАЙОНА И ИНТЕРФЕЙС ---
 st.title("🏙️ Центр интеллектуального управления г. Алматы")
+# Отображение текущего времени Алматы в заголовке
+st.write(f"📅 Текущее время в Алматы (UTC+5): **{almaty_now.strftime('%H:%M:%S | %d.%m.%Y')}**")
+
 selected_district = st.sidebar.selectbox("🎯 Выберите район управления:", list(districts_db.keys()))
 
-# Данные конкретно для выбранного района
 d_data = df[df["Район"] == selected_district].iloc[0]
 d_info = districts_db[selected_district]
 
@@ -68,29 +75,24 @@ fig_map = px.density_mapbox(map_points, lat='lat', lon='lon', z='intensity',
 fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, coloraxis_showscale=False)
 st.plotly_chart(fig_map, use_container_width=True)
 
-# --- 5. ПРОГНОЗ И АНАЛИЗ (ИСПРАВЛЕННЫЙ) ---
+# --- 5. ПРОГНОЗ И АНАЛИЗ (С УЧЕТОМ ВРЕМЕНИ АЛМАТЫ) ---
 c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("📉 Прогноз нагрузки на 60 мин")
-    
-    # Создаем реалистичный прогноз от текущей точки
     current_val = d_data['Пробки']
     
-    # Определяем тренд: в нагруженных районах пробки обычно растут
     if current_val > 7:
-        step = np.random.uniform(0.1, 0.4) # Растет
+        step = np.random.uniform(0.1, 0.4)
     elif current_val < 4:
-        step = np.random.uniform(-0.2, 0.2) # Стабильно
+        step = np.random.uniform(-0.2, 0.2)
     else:
-        step = np.random.uniform(-0.3, 0.3) # Колеблется
+        step = np.random.uniform(-0.3, 0.3)
 
-    # Генерируем 5 точек (каждые 15 минут)
-    future_times = [datetime.now() + timedelta(minutes=i*15) for i in range(5)]
-    # Первая точка ВСЕГДА равна текущему значению
+    # Используем almaty_now для создания прогнозных точек
+    future_times = [almaty_now + timedelta(minutes=i*15) for i in range(5)]
     future_vals = [np.clip(current_val + (i * step) + np.random.uniform(-0.1, 0.1), 0, 10) for i in range(5)]
     
-    # Создаем график
     fig_forecast = go.Figure()
     fig_forecast.add_trace(go.Scatter(
         x=future_times, 
@@ -106,18 +108,19 @@ with c_left:
     fig_forecast.update_layout(
         height=300, 
         margin=dict(l=0, r=0, t=30, b=0),
-        yaxis=dict(range=[0, 11]), # Фиксируем шкалу от 0 до 10 баллов
-        xaxis_title="Время прогноза",
+        yaxis=dict(range=[0, 11]),
+        xaxis_title="Время Алматы",
         yaxis_title="Баллы пробок"
     )
     st.plotly_chart(fig_forecast, use_container_width=True)
 
 with c_right:
     st.subheader("🤖 Модуль объяснимого ИИ")
-    
-    # Динамический текст анализа
     status_text = "КРИТИЧЕСКИЙ" if current_val > 7.5 else "НОРМАЛЬНЫЙ"
     trend_desc = "росту" if future_vals[-1] > current_val else "снижению"
+    
+    # Расчет времени рекомендации по часовому поясу Алматы
+    rec_time = (almaty_now + timedelta(minutes=60)).strftime('%H:%M')
     
     st.info(f"""
     **Анализ по району {selected_district}:**
@@ -126,8 +129,7 @@ with c_right:
     * **Динамика:** Склонность к {trend_desc} нагрузки.
     * **Причина:** {d_info['problem']}.
     
-    **Рекомендация:** На основе прогноза ({future_vals[-1]:.1f} балла к 
-    {(datetime.now() + timedelta(minutes=60)).strftime('%H:%M')}), 
+    **Рекомендация:** На основе прогноза ({future_vals[-1]:.1f} балла к {rec_time}), 
     необходимо превентивное вмешательство в работу светофорных объектов.
     """)
 
@@ -146,7 +148,7 @@ with c3:
 st.divider()
 st.header("🧠 Глобальный ИИ-аналитик Алматы")
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Я анализирую все 8 районов. Спросите меня о ситуации в городе!"}]
+    st.session_state.messages = [{"role": "assistant", "content": f"Здравствуйте! Сейчас в Алматы {almaty_now.strftime('%H:%M')}. Я анализирую все 8 районов. Спросите меня о ситуации!"}]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]): st.markdown(message["content"])
@@ -157,17 +159,16 @@ if prompt := st.chat_input("Например: 'Общий отчет'"):
 
     with st.chat_message("assistant"):
         user_query = prompt.lower()
-        # ТЕПЕРЬ df ДОСТУПЕН ВЕЗДЕ!
         worst_traffic_district = df.loc[df['Пробки'].idxmax()]['Район']
         max_traffic_val = df['Пробки'].max()
         worst_air_district = df.loc[df['AQI'].idxmax()]['Район']
         
         if "отчет" in user_query or "все" in user_query:
-            response = f"**Отчет по Алматы:** Хуже всего с пробками в районе **{worst_traffic_district}** ({max_traffic_val:.1f} балла). Самый высокий AQI в районе **{worst_air_district}**."
+            response = f"**Отчет по Алматы на {almaty_now.strftime('%H:%M')}:** Хуже всего с пробками в районе **{worst_traffic_district}** ({max_traffic_val:.1f} балла). Самый высокий AQI в районе **{worst_air_district}**."
         elif "пробк" in user_query:
             response = f"В городе средняя загруженность {df['Пробки'].mean():.1f} балла. Лидер по заторам — {worst_traffic_district}."
         else:
-            response = f"Я вижу данные по всем районам. В {selected_district}е сейчас {d_data['Пробки']:.1f} балла. Где еще проверить?"
+            response = f"Я вижу данные по всему городу. В {selected_district}е сейчас {d_data['Пробки']:.1f} балла. Время Алматы: {almaty_now.strftime('%H:%M')}."
         
         st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
